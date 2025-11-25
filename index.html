@@ -149,21 +149,13 @@ function generateBasemap() {
 
   lastTiles = { tiles: tiles, zoom: zoom, grid: grid, center: center };
 
-  var txt = 'Basemap Tiles Generated (OSM):
-
-';
+  var txt = 'Basemap Tiles Generated (OSM)\n\n';
   for (var i = 0; i < tiles.length; i++) {
-    txt += (i+1) + '. ' + tiles[i].url + '
-';
+    txt += (i+1) + '. ' + tiles[i].url + '\n';
   }
-  txt += '
-Total Tile: ' + tiles.length + '
-';
-  txt += 'Center tile coords: x=' + center.x + ', y=' + center.y + ' (zoom=' + zoom + ')
-';
-  txt += '
-Klik "Export as Trainz ZIP" untuk membuat ZIP asset (config + texture + preview).
-(Perhatian: tile fetch dapat dibatasi oleh server jika terlalu banyak permintaan)';
+  txt += '\nTotal Tile: ' + tiles.length + '\n';
+  txt += 'Center tile coords: x=' + center.x + ', y=' + center.y + ' (zoom=' + zoom + ')\n';
+  txt += '\nKlik "Export as Trainz ZIP" untuk membuat ZIP asset (config + texture + preview).\n(Perhatian: tile fetch dapat dibatasi oleh server jika terlalu banyak permintaan)';
   document.getElementById('result').innerText = txt;
 
   // fit bounds
@@ -231,47 +223,30 @@ function exportTrainzZip() {
 
       // create a simple Trainz texture descriptor (basemap.texture.txt)
       var textureTxt = '';
-      textureTxt += 'name = basemap_texture
-';
-      textureTxt += 'file = basemap.jpg
-';
-      textureTxt += 'width = ' + canvas.width + '
-';
-      textureTxt += 'height = ' + canvas.height + '
-';
-      textureTxt += 'format = JPEG
-';
+      textureTxt += 'name = basemap_texture\n';
+      textureTxt += 'file = basemap.jpg\n';
+      textureTxt += 'width = ' + canvas.width + '\n';
+      textureTxt += 'height = ' + canvas.height + '\n';
+      textureTxt += 'format = JPEG\n';
       root.file('basemap.texture.txt', textureTxt);
 
       // minimal config.txt (Trainz friendly generic)
       var cfg = '';
-      cfg += 'name = ' + assetName + '
-';
-      cfg += 'author = Basemap Generator
-';
-      cfg += 'type = texture
-';
-      cfg += 'description = Basemap generated from OSM tiles
-';
-      cfg += 'date = ' + (new Date()).toISOString().split('T')[0] + '
-';
+      cfg += 'name = ' + assetName + '\n';
+      cfg += 'author = Basemap Generator\n';
+      cfg += 'type = texture\n';
+      cfg += 'description = Basemap generated from OSM tiles\n';
+      cfg += 'date = ' + (new Date()).toISOString().split('T')[0] + '\n';
       root.file('config.txt', cfg);
 
       // add readme/instructions
       var readme = '';
-      readme += 'This ZIP contains a Trainz asset folder skeleton.
-';
-      readme += 'To import into Trainz Content Manager:
-';
-      readme += '1) Extract the ZIP to a folder.
-';
-      readme += '2) In Content Manager, click Import -> Local Content -> Add Content Folder, select the extracted folder.
-';
-      readme += '3) Commit the content to create a CDP.
-';
-      readme += '
-Note: Some Trainz versions require specific config keys. If you need a specific version (TRS19 / Trainz+), request it and I will adapt the config template.
-';
+      readme += 'This ZIP contains a Trainz asset folder skeleton.\n';
+      readme += 'To import into Trainz Content Manager:\n';
+      readme += '1) Extract the ZIP to a folder.\n';
+      readme += '2) In Content Manager, click Import -> Local Content -> Add Content Folder, select the extracted folder.\n';
+      readme += '3) Commit the content to create a CDP.\n';
+      readme += '\nNote: Some Trainz versions require specific config keys. If you need a specific version (TRS19 / Trainz+), request it and I will adapt the config template.\n';
       root.file('readme.txt', readme);
 
       // generate zip
