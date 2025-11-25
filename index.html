@@ -13,7 +13,7 @@
     .card { background:white; padding:20px; border-radius:14px; max-width:900px; margin:auto; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
     input,button,select { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #aaa; box-sizing:border-box }
     button { font-weight:bold; cursor:pointer; }
-    #map { height:420px; width:100%; margin-top:15px; border-radius:10px; }
+    #map { height:420px !important; width:100%; margin-top:15px; border-radius:10px; }
     #result { margin-top:15px; background:#eef; padding:15px; border-radius:10px; white-space:pre-wrap; }
     .row { display:flex; gap:10px }
     .row > * { flex:1 }
@@ -83,7 +83,7 @@ function initMap(lat, lon, zoom) {
     map.remove();
   }
   map = L.map('map').setView([lat, lon], zoom || 13);
-  tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true });
   tileLayer.addTo(map);
 
   map.on('click', function(e) {
