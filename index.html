@@ -14,9 +14,41 @@
     button:disabled{ opacity:0.6; cursor:not-allowed }
     select,input{ padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#fff }
     pre#result{ max-height:12vh; overflow:auto; background:#0b0b0b; padding:8px; border-radius:6px }
+
+    /* Search box */
+    #searchBox {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      display: flex;
+      gap: 5px;
+    }
+    #searchInput {
+      width: 240px;
+      padding: 7px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #fff;
+      color: #000;
+    }
+    #btnSearch {
+      padding: 7px 12px;
+      border-radius: 6px;
+      border: 0;
+      background: #2196F3;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
+  
+  <!-- Search UI -->
+  <div id="searchBox">
+    <input type="text" id="searchInput" placeholder="Search location..." />
+    <button id="btnSearch">Search</button>
+  </div>
+
   <div id="map"></div>
   <div id="panel">
     <label>Ukuran Output:</label>
@@ -38,16 +70,40 @@
   <script>
     // Init map
     const map = L.map('map', { center:[-7.0,110.4], zoom:16 });
-    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', { maxZoom:20, attribution:'Esri' }).addTo(map);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', {
+      maxZoom:20, attribution:'Esri'
+    }).addTo(map);
 
     let lastImageBlob = null;
     let lastSize = 1024;
 
     function setStatus(s){ document.getElementById('status').innerText = s }
 
-    // Build export URL (Esri export API)
+    // Nominatim Search
+    document.getElementById("btnSearch").addEventListener("click", async () => {
+      const q = document.getElementById("searchInput").value.trim();
+      if (!q) return;
+
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`;
+
+      try {
+        const res = await fetch(url, { headers: { "User-Agent": "BasemapGenerator/1.0" }});
+        const data = await res.json();
+        if (data.length === 0) {
+          alert("Location not found");
+          return;
+        }
+
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        map.setView([lat, lon], 17);
+      } catch (err) {
+        alert("Search error: " + err);
+      }
+    });
+
+    // build export URL
     function buildEsriExportURL(bbox, size){
-      // bbox in order: minX,minY,maxX,maxY (lon,lat)
       const params = new URLSearchParams({
         bbox: bbox,
         bboxSR: '4326',
@@ -59,87 +115,102 @@
       return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?' + params.toString();
     }
 
-    // Generate high-res image and store blob
+    // Generate image
     document.getElementById('btnGenerate').addEventListener('click', async () => {
       setStatus('Generating...');
       document.getElementById('btnExport').disabled = true;
-      const size = parseInt(document.getElementById('sizeSel').value, 10) || 1024;
+      const size = parseInt(document.getElementById('sizeSel').value) || 1024;
       lastSize = size;
 
-      const bounds = map.getBounds();
-      const minLat = bounds.getSouth();
-      const minLng = bounds.getWest();
-      const maxLat = bounds.getNorth();
-      const maxLng = bounds.getEast();
-      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
+      const b = map.getBounds();
+      const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
 
       const url = buildEsriExportURL(bbox, size);
-      setStatus('Fetching image from Esri...');
+      setStatus('Fetching image...');
 
-      try{
+      try {
         const res = await fetch(url);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const blob = await res.blob();
-        lastImageBlob = blob;
-        document.getElementById('result').innerText = 'Image fetched. Size: ' + size + '×' + size + '\nURL: ' + url;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        lastImageBlob = await res.blob();
+        document.getElementById('result').innerText = 'Image fetched: ' + size + '×' + size;
         setStatus('Ready to export');
         document.getElementById('btnExport').disabled = false;
-      }catch(err){
-        console.error(err);
-        document.getElementById('result').innerText = 'Error fetching image: ' + err;
+      } catch (e) {
         setStatus('Error');
+        document.getElementById('result').innerText = e;
       }
     });
 
-    // Export to Trainz ZIP
+    // Export ZIP
     document.getElementById('btnExport').addEventListener('click', async () => {
-      if(!lastImageBlob) { alert('Belum ada image. Klik Generate Image.'); return; }
-      setStatus('Building ZIP...');
+      if(!lastImageBlob) return alert("Generate image dulu!");
 
-      // create thumbnail 240x180
-      const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.width = 240; thumbCanvas.height = 180;
-      const thumbCtx = thumbCanvas.getContext('2d');
+      setStatus("Building ZIP...");
+
       const imgBitmap = await createImageBitmap(lastImageBlob);
-      // draw scaled to thumbnail
-      thumbCtx.drawImage(imgBitmap, 0, 0, thumbCanvas.width, thumbCanvas.height);
-      const thumbBlob = await new Promise(res => thumbCanvas.toBlob(res, 'image/jpeg'));
+      const thumbCanvas = document.createElement("canvas");
+      thumbCanvas.width = 240; thumbCanvas.height = 180;
+      thumbCanvas.getContext("2d").drawImage(imgBitmap,0,0,240,180);
+      const thumbBlob = await new Promise(r => thumbCanvas.toBlob(r,"image/jpeg"));
 
-      // prepare config text (user provided template adjusted)
-      const configTxt = `kuid               <kuid:xxxxxx:xxxx>\n`+
-                        `username           "Basemap HD"\n`+
-                        `description        "Generated basemap"\n`+
-                        `trainz-build       2.9\n`+
-                        `kind               "scenery"\n`+
-                        `category-class     "BR"\n`+
-                        `category-era       "2010s"\n`+
-                        `category-region    "ID"\n`+
-                        `author             "Farhan Abdul Rahman"\n`+
-                        `organisation       ""\n`+
-                        `contact-email      ""\n`+
-                        `contact-website    ""\n`+
-                        `license            ""\n\n`+
-                        `mesh-table\n{\n  default\n  {\n    mesh           "basemap.im"\n    auto-create    1\n  }\n}\n`+
-                        `light              1\n\n`+
-                        `thumbnails\n{\n  0\n  {\n    image          "thumbnail.jpg"\n    width          240\n    height         180\n  }\n}\n`;
+      const configTxt =
+`kuid               <kuid:xxxxxx:xxxx>
+username           "Basemap HD"
+description        "Generated basemap"
+trainz-build       2.9
+kind               "scenery"
+category-class     "BR"
+category-era       "2010s"
+category-region    "ID"
+author             "Farhan Abdul Rahman"
 
-      // texture descriptor
-      const textureTxt = 'basemap.jpg\ncompression=jpeg\n';
+mesh-table
+{
+  default
+  {
+    mesh           "basemap.im"
+    auto-create    1
+  }
+}
+light              1
 
-      // simple .im mesh text (very minimal plane). Trainz .im format varies; this is a basic placeholder.
-      const imText = 'imfileversion 1.0\nmesh\n{\n  vertex 4\n  { -0.5, 0, -0.5 }\n  { 0.5, 0, -0.5 }\n  { 0.5, 0, 0.5 }\n  { -0.5, 0, 0.5 }\n  poly 2\n  { 0,1,2 }\n  { 0,2,3 }\n}\n';
+thumbnails
+{
+  0
+  {
+    image          "thumbnail.jpg"
+    width          240
+    height         180
+  }
+}`;
 
-      // Build ZIP
+      const textureTxt = "basemap.jpg\ncompression=jpeg\n";
+
+      const imTxt =
+`imfileversion 1.0
+mesh
+{
+  vertex 4
+  { -0.5, 0, -0.5 }
+  {  0.5, 0, -0.5 }
+  {  0.5, 0,  0.5 }
+  { -0.5, 0,  0.5 }
+  poly 2
+  { 0,1,2 }
+  { 0,2,3 }
+}`;
+
       const zip = new JSZip();
-      zip.file('basemap.jpg', lastImageBlob);
-      zip.file('thumbnail.jpg', thumbBlob);
-      zip.file('basemap.texture.txt', textureTxt);
-      zip.file('config.txt', configTxt);
-      zip.file('basemap.im', imText);
+      zip.file("basemap.jpg", lastImageBlob);
+      zip.file("thumbnail.jpg", thumbBlob);
+      zip.file("basemap.texture.txt", textureTxt);
+      zip.file("config.txt", configTxt);
+      zip.file("basemap.im", imTxt);
 
-      const content = await zip.generateAsync({ type:'blob' });
-      saveAs(content, 'trainz_basemap.zip');
-      setStatus('ZIP ready');
+      const blob = await zip.generateAsync({type:"blob"});
+      saveAs(blob, "trainz_basemap.zip");
+
+      setStatus("ZIP Ready");
     });
   </script>
 </body>
