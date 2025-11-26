@@ -1,8 +1,10 @@
 const map = L.map('map', { center:[-7.0,110.4], zoom:15, zoomControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution:'&copy; <a href="https://www.openstreetmap.org/">OSM</a> &copy; CARTO',
-    subdomains:'abcd', maxZoom:19
+  attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a> &copy; CARTO',
+  subdomains: 'abcd',
+  maxZoom: 19
 }).addTo(map);
+
 
 const crop = document.getElementById('cropBox');
 const mapWrap = document.getElementById('map-wrap');
