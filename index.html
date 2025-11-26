@@ -1,285 +1,146 @@
+<!-- Basemap Generator - Single Image Export (Esri Imagery) -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Basemap Generator PRO - Trainz Export</title>
+  <title>Basemap Generator HD</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background:#f1f1f1; }
-    .card { background:white; padding:20px; border-radius:14px; max-width:900px; margin:auto; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
-    input,button,select { width:100%; padding:10px; margin:8px 0; border-radius:8px; border:1px solid #aaa; box-sizing:border-box }
-    button { font-weight:bold; cursor:pointer; }
-    #map { height:420px !important; width:100%; margin-top:15px; border-radius:10px; }
-    #result { margin-top:15px; background:#eef; padding:15px; border-radius:10px; white-space:pre-wrap; }
-    .row { display:flex; gap:10px }
-    .row > * { flex:1 }
-    .small { width:48% }
+    body { margin:0; padding:0; font-family:Arial, sans-serif; background:#111; color:#fff }
+    #map { width:100vw; height:75vh }
+    #panel { padding:10px; background:#222; display:flex; gap:10px; align-items:center }
+    button{ padding:8px 12px; border-radius:6px; border:0; background:#4caf50; color:#fff; cursor:pointer }
+    button:disabled{ opacity:0.6; cursor:not-allowed }
+    select,input{ padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#fff }
+    pre#result{ max-height:12vh; overflow:auto; background:#0b0b0b; padding:8px; border-radius:6px }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Basemap Generator PRO (Realscale Trainz) — Export .zip Asset</h2>
-
-    <label>Pilih Lokasi dari Map (klik pada map)</label>
-    <div class="row">
-      <input type="text" id="lat" placeholder="Latitude" readonly />
-      <input type="text" id="lon" placeholder="Longitude" readonly />
-    </div>
-
-    <label>Zoom Level</label>
-    <input type="number" id="zoom" value="18" min="0" max="22" />
-
-    <label>Jumlah Tile (Grid) — 1 baseboard = 720m (grid x grid tiles)</label>
-    <input type="number" id="grid" value="3" min="1" max="12" />
-
-    <div class="row">
-      <button id="btnGenerate">Generate Basemap</button>
-      <button id="btnExport" disabled>Export as Trainz ZIP</button>
-    </div>
-
-    <label>Presets / Test cases (klik untuk coba)</label>
-    <select id="preset">
-      <option value="">-- pilih preset --</option>
-      <option value="-7.150,110.140">Semarang, Central Java (sample)</option>
-      <option value="-6.2088,106.8456">Jakarta (sample)</option>
-      <option value="-6.9667,110.4167">Solo (sample)</option>
+  <div id="map"></div>
+  <div id="panel">
+    <label>Ukuran Output:</label>
+    <select id="sizeSel">
+      <option value="1024">1024 × 1024</option>
+      <option value="2048">2048 × 2048</option>
+      <option value="4096">4096 × 4096</option>
     </select>
-
-    <div id="map"></div>
-    <div id="result">Klik di map lalu Generate Basemap. Setelah berhasil, klik "Export as Trainz ZIP" untuk mengunduh asset siap import ke Content Manager.</div>
+    <button id="btnGenerate">Generate Image</button>
+    <button id="btnExport" disabled>Export Trainz ZIP</button>
+    <span id="status"></span>
   </div>
+  <pre id="result">Result: -</pre>
 
-<script>
-// ----------------- Utilities -----------------
-function latLonToTileXY(lat, lon, zoom) {
-  var latRad = lat * Math.PI / 180;
-  var n = Math.pow(2, zoom);
-  var x = Math.floor((lon + 180) / 360 * n);
-  var y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return { x: x, y: y };
-}
-function tileXYToBounds(x, y, z) {
-  var n = Math.pow(2, z);
-  var lon1 = x / n * 360 - 180;
-  var lat1 = Math.atan(Math.sinh(Math.PI * (1 - 2 * y / n))) * 180 / Math.PI;
-  var lon2 = (x + 1) / n * 360 - 180;
-  var lat2 = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + 1) / n))) * 180 / Math.PI;
-  return [[lat2, lon1], [lat1, lon2]]; // southWest, northEast
-}
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
-// ----------------- Map and UI -----------------
-var map;
-var markers = [];
-var tileLayer;
-var lastTiles = null;
+  <script>
+    // Init map
+    const map = L.map('map', { center:[-7.0,110.4], zoom:16 });
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', { maxZoom:20, attribution:'Esri' }).addTo(map);
 
-function initMap(lat, lon, zoom) {
-  if (map) {
-    map.off();
-    map.remove();
-  }
-  map = L.map('map').setView([lat, lon], zoom || 13);
-  tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true });
-  tileLayer.addTo(map);
+    let lastImageBlob = null;
+    let lastSize = 1024;
 
-  map.on('click', function(e) {
-    var latVal = e.latlng.lat.toFixed(6);
-    var lonVal = e.latlng.lng.toFixed(6);
-    document.getElementById('lat').value = latVal;
-    document.getElementById('lon').value = lonVal;
+    function setStatus(s){ document.getElementById('status').innerText = s }
 
-    var m = L.marker([parseFloat(latVal), parseFloat(lonVal)], { draggable: true }).addTo(map);
-    m.on('dragend', function(ev){
-      var p = ev.target.getLatLng();
-      document.getElementById('lat').value = p.lat.toFixed(6);
-      document.getElementById('lon').value = p.lng.toFixed(6);
-    });
-    markers.push(m);
-  });
-}
-initMap(-6.9667, 110.4167, 13);
-
-function clearMarkers() {
-  markers.forEach(function(m){ map.removeLayer(m); });
-  markers = [];
-}
-
-// ----------------- Generate tiles and overlays -----------------
-function generateBasemap() {
-  var lat = parseFloat(document.getElementById('lat').value);
-  var lon = parseFloat(document.getElementById('lon').value);
-  var zoom = parseInt(document.getElementById('zoom').value, 10);
-  var grid = parseInt(document.getElementById('grid').value, 10);
-  if (isNaN(lat) || isNaN(lon)) {
-    document.getElementById('result').innerText = 'Isi latitude dan longitude! Klik di map atau pilih preset.';
-    return;
-  }
-  if (isNaN(zoom)) zoom = 18;
-  if (isNaN(grid) || grid < 1) grid = 1;
-
-  var center = latLonToTileXY(lat, lon, zoom);
-  var half = Math.floor(grid / 2);
-  var startX = center.x - half;
-  var startY = center.y - half;
-
-  var tiles = [];
-  for (var dx = 0; dx < grid; dx++) {
-    for (var dy = 0; dy < grid; dy++) {
-      var tx = startX + dx;
-      var ty = startY + dy;
-      var url = 'https://tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
-      tiles.push({ x: tx, y: ty, url: url });
-    }
-  }
-
-  // draw rectangles
-  if (window._tileRects) {
-    window._tileRects.forEach(function(r){ map.removeLayer(r); });
-  }
-  window._tileRects = [];
-  tiles.forEach(function(t){
-    var b = tileXYToBounds(t.x, t.y, zoom);
-    var rect = L.rectangle(b, { weight:1, fill:false }).addTo(map);
-    window._tileRects.push(rect);
-  });
-
-  lastTiles = { tiles: tiles, zoom: zoom, grid: grid, center: center };
-
-  var txt = 'Basemap Tiles Generated (OSM)\n\n';
-  for (var i = 0; i < tiles.length; i++) {
-    txt += (i+1) + '. ' + tiles[i].url + '\n';
-  }
-  txt += '\nTotal Tile: ' + tiles.length + '\n';
-  txt += 'Center tile coords: x=' + center.x + ', y=' + center.y + ' (zoom=' + zoom + ')\n';
-  txt += '\nKlik "Export as Trainz ZIP" untuk membuat ZIP asset (config + texture + preview).\n(Perhatian: tile fetch dapat dibatasi oleh server jika terlalu banyak permintaan)';
-  document.getElementById('result').innerText = txt;
-
-  // fit bounds
-  var group = L.featureGroup((window._tileRects || []).concat(markers));
-  if (group.getLayers().length > 0) map.fitBounds(group.getBounds(), { padding: [20,20] });
-
-  document.getElementById('btnExport').disabled = false;
-}
-
-// ----------------- Export ZIP as Trainz-ready asset -----------------
-function exportTrainzZip() {
-  if (!lastTiles) {
-    alert('Belum generate basemap. Klik Generate Basemap dahulu.');
-    return;
-  }
-  var tiles = lastTiles.tiles;
-  var grid = lastTiles.grid;
-  var zoom = lastTiles.zoom;
-  var assetName = 'basemap_asset';
-
-  // attempt to stitch tiles into one image
-  var tileSize = 256; // OSM tile size
-  var cols = grid;
-  var rows = grid;
-  var canvas = document.createElement('canvas');
-  canvas.width = cols * tileSize;
-  canvas.height = rows * tileSize;
-  var ctx = canvas.getContext('2d');
-
-  // load each tile image with crossOrigin
-  var loadPromises = tiles.map(function(t, index) {
-    return new Promise(function(resolve) {
-      var img = new Image();
-      img.crossOrigin = 'Anonymous';
-      img.onload = function() { resolve({ img: img, index: index }); };
-      img.onerror = function() { resolve({ img: null, index: index }); };
-      img.src = t.url;
-    });
-  });
-
-  Promise.all(loadPromises).then(function(results) {
-    // draw images
-    for (var i = 0; i < results.length; i++) {
-      var r = results[i];
-      var dx = i % cols;
-      var dy = Math.floor(i / cols);
-      if (r.img) {
-        ctx.drawImage(r.img, dx * tileSize, dy * tileSize, tileSize, tileSize);
-      } else {
-        // draw placeholder
-        ctx.fillStyle = '#444';
-        ctx.fillRect(dx * tileSize, dy * tileSize, tileSize, tileSize);
-        ctx.fillStyle = '#fff';
-        ctx.fillText('no tile', dx * tileSize + 10, dy * tileSize + 20);
-      }
-    }
-
-    canvas.toBlob(function(blob) {
-      var zip = new JSZip();
-      var root = zip.folder(assetName);
-
-      // add preview and basemap image
-      root.file('basemap.jpg', blob);
-      root.file('preview.jpg', blob);
-
-      // create a simple Trainz texture descriptor (basemap.texture.txt)
-      var textureTxt = '';
-      textureTxt += 'name = basemap_texture\n';
-      textureTxt += 'file = basemap.jpg\n';
-      textureTxt += 'width = ' + canvas.width + '\n';
-      textureTxt += 'height = ' + canvas.height + '\n';
-      textureTxt += 'format = JPEG\n';
-      root.file('basemap.texture.txt', textureTxt);
-
-      // minimal config.txt (Trainz friendly generic)
-      var cfg = '';
-      cfg += 'name = ' + assetName + '\n';
-      cfg += 'author = Basemap Generator\n';
-      cfg += 'type = texture\n';
-      cfg += 'description = Basemap generated from OSM tiles\n';
-      cfg += 'date = ' + (new Date()).toISOString().split('T')[0] + '\n';
-      root.file('config.txt', cfg);
-
-      // add readme/instructions
-      var readme = '';
-      readme += 'This ZIP contains a Trainz asset folder skeleton.\n';
-      readme += 'To import into Trainz Content Manager:\n';
-      readme += '1) Extract the ZIP to a folder.\n';
-      readme += '2) In Content Manager, click Import -> Local Content -> Add Content Folder, select the extracted folder.\n';
-      readme += '3) Commit the content to create a CDP.\n';
-      readme += '\nNote: Some Trainz versions require specific config keys. If you need a specific version (TRS19 / Trainz+), request it and I will adapt the config template.\n';
-      root.file('readme.txt', readme);
-
-      // generate zip
-      zip.generateAsync({ type: 'blob' }).then(function(content) {
-        saveAs(content, assetName + '.zip');
+    // Build export URL (Esri export API)
+    function buildEsriExportURL(bbox, size){
+      // bbox in order: minX,minY,maxX,maxY (lon,lat)
+      const params = new URLSearchParams({
+        bbox: bbox,
+        bboxSR: '4326',
+        size: size + ',' + size,
+        imageSR: '3857',
+        format: 'jpgpng',
+        f: 'image'
       });
+      return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?' + params.toString();
+    }
 
-    }, 'image/jpeg', 0.9);
+    // Generate high-res image and store blob
+    document.getElementById('btnGenerate').addEventListener('click', async () => {
+      setStatus('Generating...');
+      document.getElementById('btnExport').disabled = true;
+      const size = parseInt(document.getElementById('sizeSel').value, 10) || 1024;
+      lastSize = size;
 
-  }).catch(function(err) {
-    alert('Gagal memuat tile: ' + err);
-  });
-}
+      const bounds = map.getBounds();
+      const minLat = bounds.getSouth();
+      const minLng = bounds.getWest();
+      const maxLat = bounds.getNorth();
+      const maxLng = bounds.getEast();
+      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
 
-// wire UI
-document.getElementById('btnGenerate').addEventListener('click', generateBasemap);
-document.getElementById('btnExport').addEventListener('click', exportTrainzZip);
+      const url = buildEsriExportURL(bbox, size);
+      setStatus('Fetching image from Esri...');
 
-// presets
-document.getElementById('preset').addEventListener('change', function(e){
-  var v = e.target.value;
-  if (!v) return;
-  var parts = v.split(',');
-  var plat = parseFloat(parts[0]);
-  var plon = parseFloat(parts[1]);
-  document.getElementById('lat').value = plat.toFixed(6);
-  document.getElementById('lon').value = plon.toFixed(6);
-  clearMarkers();
-  var m = L.marker([plat, plon], { draggable: true }).addTo(map);
-  markers.push(m);
-  map.setView([plat, plon], 13);
-});
+      try{
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        lastImageBlob = blob;
+        document.getElementById('result').innerText = 'Image fetched. Size: ' + size + '×' + size + '\nURL: ' + url;
+        setStatus('Ready to export');
+        document.getElementById('btnExport').disabled = false;
+      }catch(err){
+        console.error(err);
+        document.getElementById('result').innerText = 'Error fetching image: ' + err;
+        setStatus('Error');
+      }
+    });
 
-</script>
+    // Export to Trainz ZIP
+    document.getElementById('btnExport').addEventListener('click', async () => {
+      if(!lastImageBlob) { alert('Belum ada image. Klik Generate Image.'); return; }
+      setStatus('Building ZIP...');
+
+      // create thumbnail 240x180
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 240; thumbCanvas.height = 180;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      const imgBitmap = await createImageBitmap(lastImageBlob);
+      // draw scaled to thumbnail
+      thumbCtx.drawImage(imgBitmap, 0, 0, thumbCanvas.width, thumbCanvas.height);
+      const thumbBlob = await new Promise(res => thumbCanvas.toBlob(res, 'image/jpeg'));
+
+      // prepare config text (user provided template adjusted)
+      const configTxt = `kuid               <kuid:xxxxxx:xxxx>\n`+
+                        `username           "Basemap HD"\n`+
+                        `description        "Generated basemap"\n`+
+                        `trainz-build       2.9\n`+
+                        `kind               "scenery"\n`+
+                        `category-class     "BR"\n`+
+                        `category-era       "2010s"\n`+
+                        `category-region    "ID"\n`+
+                        `author             "Farhan Abdul Rahman"\n`+
+                        `organisation       ""\n`+
+                        `contact-email      ""\n`+
+                        `contact-website    ""\n`+
+                        `license            ""\n\n`+
+                        `mesh-table\n{\n  default\n  {\n    mesh           "basemap.im"\n    auto-create    1\n  }\n}\n`+
+                        `light              1\n\n`+
+                        `thumbnails\n{\n  0\n  {\n    image          "thumbnail.jpg"\n    width          240\n    height         180\n  }\n}\n`;
+
+      // texture descriptor
+      const textureTxt = 'basemap.jpg\ncompression=jpeg\n';
+
+      // simple .im mesh text (very minimal plane). Trainz .im format varies; this is a basic placeholder.
+      const imText = 'imfileversion 1.0\nmesh\n{\n  vertex 4\n  { -0.5, 0, -0.5 }\n  { 0.5, 0, -0.5 }\n  { 0.5, 0, 0.5 }\n  { -0.5, 0, 0.5 }\n  poly 2\n  { 0,1,2 }\n  { 0,2,3 }\n}\n';
+
+      // Build ZIP
+      const zip = new JSZip();
+      zip.file('basemap.jpg', lastImageBlob);
+      zip.file('thumbnail.jpg', thumbBlob);
+      zip.file('basemap.texture.txt', textureTxt);
+      zip.file('config.txt', configTxt);
+      zip.file('basemap.im', imText);
+
+      const content = await zip.generateAsync({ type:'blob' });
+      saveAs(content, 'trainz_basemap.zip');
+      setStatus('ZIP ready');
+    });
+  </script>
 </body>
 </html>
