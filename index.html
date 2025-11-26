@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BASEMAP-GENERATOR powered by ChatGPT and NXTIndustries</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>BASEMAP-GENERATOR — powered by ChatGpt and NXTIndustries</title>
+  <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
@@ -12,7 +12,7 @@
     <header class="app-head card">
       <div class="logo">BG</div>
       <div>
-        <h1>BASEMAP-GENERATOR <strong>powered by ChatGPT and NXTIndustries</strong></h1>
+        <h1>BASEMAP-GENERATOR — <strong>powered by ChatGpt and NXTIndustries</strong></h1>
         <div class="subtitle">Select area, export high-res basemap for Trainz</div>
       </div>
     </header>
@@ -22,9 +22,15 @@
         <input id="searchInput" type="text" placeholder="Search place or address" />
         <button id="btnSearch" class="btn ghost">Search</button>
       </div>
+
       <div id="map"></div>
+
       <div id="cropBox">
-        <div class="crop-label">Crop Area</div>
+        <div style="pointer-events:none">Crop Area</div>
+        <div class="handle h-tl" data-h="h-tl"></div>
+        <div class="handle h-tr" data-h="h-tr"></div>
+        <div class="handle h-bl" data-h="h-bl"></div>
+        <div class="handle h-br" data-h="h-br"></div>
       </div>
     </div>
 
@@ -37,13 +43,12 @@
           <option value="4096">4096 × 4096</option>
         </select>
 
-        <label class="small">Custom Config</label>
-        <input id="inputKuid" type="text" placeholder="kuid <kuid:xxxx:xxxx>" />
-        <input id="inputBuild" type="text" placeholder="Trainz Build (e.g., 2.9)" />
-        <input id="inputAuthor" type="text" placeholder="Author" />
-        <input id="inputPublisher" type="text" placeholder="Publisher" />
-        <input id="inputDesc" type="text" placeholder="Description" />
-
+        <label class="small">Trainz Config</label>
+        <input id="kuidInput" type="text" placeholder="KUID e.g. <kuid:xxxx:xxxx>" />
+        <input id="authorInput" type="text" placeholder="Author" />
+        <input id="publisherInput" type="text" placeholder="Publisher" />
+        <input id="descInput" type="text" placeholder="Description" />
+        
         <label class="small">Actions</label>
         <div style="display:flex;gap:8px">
           <button id="btnGenerate" class="btn">Generate</button>
@@ -56,9 +61,9 @@
         </div>
       </div>
     </aside>
-
-    <footer>Built for Trainz — Export .zip (basemap + config + .im)</footer>
   </div>
+
+  <footer>Built for Trainz — Export .zip (basemap + config + .im)</footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
