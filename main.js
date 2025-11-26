@@ -1,13 +1,14 @@
 // --- init map ---
 const map = L.map('map', { center:[-7.0,110.4], zoom:15, zoomControl:true });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors',
+  maxZoom:19
 }).addTo(map);
 
 // fix map container resize
 window.addEventListener('load', ()=>{ map.invalidateSize(); });
 
-// --- crop 1:1 ---
+// --- crop box ---
 const crop = document.getElementById('cropBox');
 const mapWrap = document.getElementById('map-wrap');
 function resetCrop(){
@@ -40,7 +41,7 @@ window.addEventListener('mousemove', e=>{
 });
 window.addEventListener('mouseup', ()=>{ dragging=false; document.body.style.userSelect='auto'; });
 
-// convert crop -> bbox
+// get crop bbox
 function getCropBbox(){
   const rect=crop.getBoundingClientRect();
   const mapRect=map.getContainer().getBoundingClientRect();
@@ -62,44 +63,42 @@ document.getElementById('btnSearch').addEventListener('click', async ()=>{
   }catch(e){alert('Search error');}
 });
 
-// --- Generate crop image ---
+// --- Generate basemap PNG using leaflet-image ---
 let lastCanvas=null;
-document.getElementById('btnGenerate').addEventListener('click', async ()=>{
+document.getElementById('btnGenerate').addEventListener('click', ()=>{
   const bbox=getCropBbox();
-  const outputSize=parseInt(document.getElementById('sizeSel').value);
-
-  // clone map to hidden container
-  const tempDiv=document.createElement('div');
-  tempDiv.style.width=outputSize+'px';
-  tempDiv.style.height=outputSize+'px';
-  tempDiv.style.position='absolute';
-  tempDiv.style.left='-9999px';
-  document.body.appendChild(tempDiv);
-
-  const tmpMap=L.map(tempDiv, {center:[(bbox[1]+bbox[3])/2,(bbox[0]+bbox[2])/2],zoom:map.getZoom(),zoomControl:false});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
-    attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
-  }).addTo(tmpMap);
-
-  await new Promise(r=>setTimeout(r,500)); // wait tiles load
-
-  const canvasImg = await html2canvas(tempDiv, {backgroundColor:null});
-  lastCanvas=canvasImg;
-  document.getElementById('result').textContent='Generated '+outputSize+'x'+outputSize+' basemap.';
-  document.getElementById('btnExport').disabled=false;
-  tmpMap.remove(); tempDiv.remove();
+  map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
+  
+  leafletImage(map, function(err, canvas){
+    if(err){ console.error(err); return; }
+    const outputSize=parseInt(document.getElementById('sizeSel').value);
+    const img=document.createElement('canvas');
+    img.width=outputSize; img.height=outputSize;
+    const ctx=img.getContext('2d');
+    ctx.drawImage(canvas,0,0,outputSize,outputSize);
+    lastCanvas=img;
+    document.getElementById('result').textContent='Generated '+outputSize+'×'+outputSize+' basemap.';
+    document.getElementById('btnExport').disabled=false;
+  });
 });
 
-// --- Export ZIP ---
+// --- Export ZIP with basemap + config.txt + map.im ---
+function generateConfigTxt(name="Basemap", author="YourName", version="1.0"){
+  return `Name=${name}\nAuthor=${author}\nVersion=${version}\nDescription=Generated basemap for Trainz\n`;
+}
+
+function generateMapIM(){ return "IM file placeholder for Trainz basemap"; }
+
 document.getElementById('btnExport').addEventListener('click', ()=>{
   if(!lastCanvas) return;
   const zip=new JSZip();
   lastCanvas.toBlob(blob=>{
     zip.file('basemap.png',blob);
-    zip.file('config.txt','Trainz basemap config placeholder');
-    zip.file('map.im','IM file placeholder');
+    zip.file('config.txt',generateConfigTxt("MyBasemap","Farhan","1.0"));
+    zip.file('map.im',generateMapIM());
     zip.generateAsync({type:'blob'}).then(content=>{
       saveAs(content,'basemap_trainz.zip');
+      document.getElementById('result').textContent='ZIP exported!';
     });
   });
 });
