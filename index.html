@@ -1,145 +1,140 @@
-<!-- Basemap Generator - Single Image Export (Esri Imagery) -->
+<!-- Basemap Generator - Improved UI with Adjustable Crop Box -->
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Basemap Generator HD</title>
+  <title>Basemap Generator HD+</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    body { margin:0; padding:0; font-family:Arial, sans-serif; background:#111; color:#fff }
-    #map { width:100vw; height:75vh }
-    #panel { padding:10px; background:#222; display:flex; gap:10px; align-items:center }
-    button{ padding:8px 12px; border-radius:6px; border:0; background:#4caf50; color:#fff; cursor:pointer }
-    button:disabled{ opacity:0.6; cursor:not-allowed }
-    select,input{ padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#fff }
-    pre#result{ max-height:12vh; overflow:auto; background:#0b0b0b; padding:8px; border-radius:6px }
+    body { margin:0; padding:0; font-family:Arial, sans-serif; background:#111; color:white; }
+    #map { width:100vw; height:75vh; position:relative; }
+    #panel { padding:12px; background:#222; display:flex; gap:10px; align-items:center; }
+    button { padding:10px 15px; border-radius:8px; border:0; background:#4caf50; color:white; cursor:pointer; font-weight:bold }
+    button:disabled { opacity:0.5; }
+    #searchBox { position:absolute; top:15px; left:15px; z-index:1000; display:flex; gap:6px; }
+    #searchInput { padding:8px; width:260px; border-radius:6px; border:1px solid #666; }
+    #cropBox { position:absolute; border:3px dashed #00eaff; z-index:900; pointer-events:none; }
+    #result { padding:10px; background:#000; max-height:15vh; overflow:auto; border-radius:6px; }
   </style>
 </head>
 <body>
-  <div id="map"></div>
+
+  <!-- Search UI -->
+  <div id="searchBox">
+    <input id="searchInput" type="text" placeholder="Search location..." />
+    <button id="btnSearch" style="background:#2196F3">Search</button>
+  </div>
+
+  <div id="map">
+    <div id="cropBox"></div>
+  </div>
+
   <div id="panel">
-    <label>Ukuran Output:</label>
+    <label>Size:</label>
     <select id="sizeSel">
       <option value="1024">1024 × 1024</option>
       <option value="2048">2048 × 2048</option>
       <option value="4096">4096 × 4096</option>
     </select>
-    <button id="btnGenerate">Generate Image</button>
-    <button id="btnExport" disabled>Export Trainz ZIP</button>
+
+    <button id="btnGenerate">Generate</button>
+    <button id="btnExport" disabled>Export ZIP</button>
     <span id="status"></span>
   </div>
-  <pre id="result">Result: -</pre>
+
+  <pre id="result">Ready.</pre>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
   <script>
-    // Init map
     const map = L.map('map', { center:[-7.0,110.4], zoom:16 });
-    const esri = L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png', { maxZoom: 20, attribution: '© Stadia Maps, © OpenMapTiles, © OpenStreetMap' }).addTo(map);
+
+    L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg', {
+      maxZoom:20,
+      attribution:'© Stadia Maps'
+    }).addTo(map);
 
     let lastImageBlob = null;
     let lastSize = 1024;
 
-    function setStatus(s){ document.getElementById('status').innerText = s }
+    const cropBox = document.getElementById('cropBox');
+    const mapDiv = document.getElementById('map');
 
-    // Build export URL (Esri export API)
-    function buildEsriExportURL(bbox, size){
-      // bbox in order: minX,minY,maxX,maxY (lon,lat)
-      const params = new URLSearchParams({
-        bbox: bbox,
-        bboxSR: '4326',
-        size: size + ',' + size,
-        imageSR: '3857',
-        format: 'jpgpng',
-        f: 'image'
-      });
-      return 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?' + params.toString();
+    function updateCrop(){
+      const w = mapDiv.clientWidth * 0.35;
+      const h = mapDiv.clientHeight * 0.35;
+      cropBox.style.width = w + 'px';
+      cropBox.style.height = h + 'px';
+      cropBox.style.left = (mapDiv.clientWidth/2 - w/2) + 'px';
+      cropBox.style.top = (mapDiv.clientHeight/2 - h/2) + 'px';
     }
+    updateCrop();
+    window.addEventListener('resize', updateCrop);
 
-    // Generate high-res image and store blob
-    document.getElementById('btnGenerate').addEventListener('click', async () => {
-      setStatus('Generating...');
-      document.getElementById('btnExport').disabled = true;
-      const size = parseInt(document.getElementById('sizeSel').value, 10) || 1024;
-      lastSize = size;
-
-      const bounds = map.getBounds();
-      const minLat = bounds.getSouth();
-      const minLng = bounds.getWest();
-      const maxLat = bounds.getNorth();
-      const maxLng = bounds.getEast();
-      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
-
-      const url = buildEsriExportURL(bbox, size);
-      setStatus('Fetching image from Esri...');
-
-      try{
+    document.getElementById("btnSearch").addEventListener("click", async () => {
+      const q = document.getElementById("searchInput").value.trim();
+      if (!q) return;
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`;
+      try {
         const res = await fetch(url);
-        if(!res.ok) throw new Error('HTTP ' + res.status);
-        const blob = await res.blob();
-        lastImageBlob = blob;
-        document.getElementById('result').innerText = 'Image fetched. Size: ' + size + '×' + size + '\nURL: ' + url;
-        setStatus('Ready to export');
-        document.getElementById('btnExport').disabled = false;
-      }catch(err){
-        console.error(err);
-        document.getElementById('result').innerText = 'Error fetching image: ' + err;
-        setStatus('Error');
-      }
+        const data = await res.json();
+        if (!data.length) return alert("Not found!");
+        map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 17);
+      } catch(e){ alert("Search error"); }
     });
 
-    // Export to Trainz ZIP
+    function getCropBounds(){
+      const rect = cropBox.getBoundingClientRect();
+      const mapRect = mapDiv.getBoundingClientRect();
+      const x1 = rect.left - mapRect.left;
+      const y1 = rect.top - mapRect.top;
+      const x2 = x1 + rect.width;
+      const y2 = y1 + rect.height;
+      const p1 = map.containerPointToLatLng([x1, y1]);
+      const p2 = map.containerPointToLatLng([x2, y2]);
+      return [p2.lng, p2.lat, p1.lng, p1.lat];
+    }
+
+    function buildUrl(bbox, size){
+      const p = new URLSearchParams({ bbox:bbox.join(','), bboxSR:4326, size:`${size},${size}`, f:'image', format:'jpgpng' });
+      return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?${p}`;
+    }
+
+    document.getElementById('btnGenerate').addEventListener('click', async () => {
+      const size = parseInt(document.getElementById('sizeSel').value, 10);
+      lastSize = size;
+      const bbox = getCropBounds();
+      const url = buildUrl(bbox, size);
+      document.getElementById('status').innerText = 'Fetching...';
+      try{
+        const res = await fetch(url);
+        lastImageBlob = await res.blob();
+        document.getElementById('btnExport').disabled = false;
+        document.getElementById('status').innerText = 'Ready';
+      }catch(e){ document.getElementById('status').innerText = 'Error'; }
+    });
+
     document.getElementById('btnExport').addEventListener('click', async () => {
-      if(!lastImageBlob) { alert('Belum ada image. Klik Generate Image.'); return; }
-      setStatus('Building ZIP...');
-
-      // create thumbnail 240x180
-      const thumbCanvas = document.createElement('canvas');
-      thumbCanvas.width = 240; thumbCanvas.height = 180;
-      const thumbCtx = thumbCanvas.getContext('2d');
-      const imgBitmap = await createImageBitmap(lastImageBlob);
-      // draw scaled to thumbnail
-      thumbCtx.drawImage(imgBitmap, 0, 0, thumbCanvas.width, thumbCanvas.height);
-      const thumbBlob = await new Promise(res => thumbCanvas.toBlob(res, 'image/jpeg'));
-
-      // prepare config text (user provided template adjusted)
-      const configTxt = `kuid               <kuid:xxxxxx:xxxx>\n`+
-                        `username           "Basemap HD"\n`+
-                        `description        "Generated basemap"\n`+
-                        `trainz-build       2.9\n`+
-                        `kind               "scenery"\n`+
-                        `category-class     "BR"\n`+
-                        `category-era       "2010s"\n`+
-                        `category-region    "ID"\n`+
-                        `author             "Farhan Abdul Rahman"\n`+
-                        `organisation       ""\n`+
-                        `contact-email      ""\n`+
-                        `contact-website    ""\n`+
-                        `license            ""\n\n`+
-                        `mesh-table\n{\n  default\n  {\n    mesh           "basemap.im"\n    auto-create    1\n  }\n}\n`+
-                        `light              1\n\n`+
-                        `thumbnails\n{\n  0\n  {\n    image          "thumbnail.jpg"\n    width          240\n    height         180\n  }\n}\n`;
-
-      // texture descriptor
-      const textureTxt = 'basemap.jpg\ncompression=jpeg\n';
-
-      // simple .im mesh text (very minimal plane). Trainz .im format varies; this is a basic placeholder.
-      const imText = 'imfileversion 1.0\nmesh\n{\n  vertex 4\n  { -0.5, 0, -0.5 }\n  { 0.5, 0, -0.5 }\n  { 0.5, 0, 0.5 }\n  { -0.5, 0, 0.5 }\n  poly 2\n  { 0,1,2 }\n  { 0,2,3 }\n}\n';
-
-      // Build ZIP
       const zip = new JSZip();
+      const imgBitmap = await createImageBitmap(lastImageBlob);
+      const thumb = document.createElement('canvas'); thumb.width=240; thumb.height=180;
+      thumb.getContext('2d').drawImage(imgBitmap,0,0,240,180);
+      const thumbBlob = await new Promise(r=>thumb.toBlob(r,'image/jpeg'));
+
       zip.file('basemap.jpg', lastImageBlob);
       zip.file('thumbnail.jpg', thumbBlob);
-      zip.file('basemap.texture.txt', textureTxt);
-      zip.file('config.txt', configTxt);
-      zip.file('basemap.im', imText);
 
-      const content = await zip.generateAsync({ type:'blob' });
-      saveAs(content, 'trainz_basemap.zip');
-      setStatus('ZIP ready');
+      zip.file('basemap.texture.txt', 'basemap.jpg\ncompression=jpeg\n');
+
+      zip.file('config.txt', `kuid <kuid:xxxxxx:xxxx>\nusername "Basemap HD"\nkind "scenery"\nmesh-table { default { mesh "basemap.im" auto-create 1 } }`);
+
+      zip.file('basemap.im', `imfileversion 1.0`);
+
+      saveAs(await zip.generateAsync({type:'blob'}), 'trainz_basemap.zip');
+      document.getElementById('status').innerText = 'ZIP Ready';
     });
   </script>
 </body>
