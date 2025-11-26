@@ -1,90 +1,68 @@
-<!-- Basemap Generator — Trainz-ready -->
-<script>
-document.getElementById('btnExport').addEventListener('click', async ()=>{
-    if(!lastImageBlob) return alert('Generate first');
-    document.getElementById('result').innerText = 'Building ZIP...';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BASEMAP-GENERATOR powered by ChatGPT and NXTIndustries</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-head card">
+      <div class="logo">BG</div>
+      <div>
+        <h1>BASEMAP-GENERATOR <strong>powered by ChatGPT and NXTIndustries</strong></h1>
+        <div class="subtitle">Select area, export high-res basemap for Trainz</div>
+      </div>
+    </header>
 
-    // thumbnail
-    const bmp = await createImageBitmap(lastImageBlob);
-    const thumb = document.createElement('canvas'); thumb.width=240; thumb.height=180;
-    thumb.getContext('2d').drawImage(bmp,0,0,240,180);
-    const thumbBlob = await new Promise(r=>thumb.toBlob(r,'image/jpeg'));
+    <div class="card" id="map-wrap">
+      <div class="top-controls">
+        <input id="searchInput" type="text" placeholder="Search place or address" />
+        <button id="btnSearch" class="btn ghost">Search</button>
+      </div>
+      <div id="map"></div>
+      <div id="cropBox">
+        <div class="crop-label">Crop Area</div>
+      </div>
+    </div>
 
-    // --- config.txt ---
-    const configTxt = `
-kuid               <kuid:354892:0001>
-description        "Basemap HD"
-username           "Basemap Asset"
-trainz-build       2.9
-kind               "scenery"
-category-class     "BR"
-category-era       "2010s"
-category-region    "US"
-author             "Farhan Abdul Rahman"
-organisation       "NXTIndustries"
-contact-email      "abdularrr478@gmail.com"
-contact-website    ""
-license            ""
+    <aside class="card meta">
+      <div class="controls">
+        <label class="small">Output Size</label>
+        <select id="sizeSel">
+          <option value="1024">1024 × 1024</option>
+          <option value="2048">2048 × 2048</option>
+          <option value="4096">4096 × 4096</option>
+        </select>
 
-mesh-table
-{
-  default
-  {
-    mesh           "basemap.im"
-    auto-create    1
-  }
-}
-light              1
+        <label class="small">Custom Config</label>
+        <input id="inputKuid" type="text" placeholder="kuid <kuid:xxxx:xxxx>" />
+        <input id="inputBuild" type="text" placeholder="Trainz Build (e.g., 2.9)" />
+        <input id="inputAuthor" type="text" placeholder="Author" />
+        <input id="inputPublisher" type="text" placeholder="Publisher" />
+        <input id="inputDesc" type="text" placeholder="Description" />
 
-thumbnails
-{
-  0
-  {
-    image          "thumbnail.jpg"
-    width          240
-    height         180
-  }
-}
+        <label class="small">Actions</label>
+        <div style="display:flex;gap:8px">
+          <button id="btnGenerate" class="btn">Generate</button>
+          <button id="btnExport" class="btn ghost" disabled>Export ZIP</button>
+        </div>
 
-kuid-table
-{
-}
-`;
+        <div class="card">
+          <label class="small">Preview / Logs</label>
+          <pre id="result">Ready.</pre>
+        </div>
+      </div>
+    </aside>
 
-    // --- basemap.texture.txt ---
-    const textureTxt = `Primary=basemap.jpg
-Tile=st
-`;
+    <footer>Built for Trainz — Export .zip (basemap + config + .im)</footer>
+  </div>
 
-    // --- basemap.im with UV mapping ---
-    const imTxt = `imfileversion 1.0
-mesh
-{
-vertex 4
-{ -0.5,0,-0.5 }
-{ 0.5,0,-0.5 }
-{ 0.5,0,0.5 }
-{ -0.5,0,0.5 }
-uv 4
-{ 0,0 }
-{ 1,0 }
-{ 1,1 }
-{ 0,1 }
-poly 2
-{ 0,1,2 }
-{ 0,2,3 }
-}
-`;
-
-    const zip = new JSZip();
-    zip.file('basemap.jpg', lastImageBlob);
-    zip.file('thumbnail.jpg', thumbBlob);
-    zip.file('basemap.texture.txt', textureTxt);
-    zip.file('config.txt', configTxt);
-    zip.file('basemap.im', imTxt);
-
-    const blob = await zip.generateAsync({type:'blob'});
-    saveAs(blob, 'trainz_basemap.zip');
-    document.getElementById('result').innerText = 'ZIP ready for Trainz';
-});
-</script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
