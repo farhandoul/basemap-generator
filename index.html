@@ -1,64 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BASEMAP-GENERATOR — Powered by ChatGPT & NXTIndustries</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>BASEMAP-GENERATOR</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-<div class="app">
-  <header class="app-head card">
-    <div class="logo">BG</div>
-    <div>
-      <h1>BASEMAP-GENERATOR <span style="font-weight:bold">Powered by ChatGPT & NXTIndustries</span></h1>
-      <div class="subtitle">Select area, export high-res basemap for Trainz</div>
-    </div>
-  </header>
+  <div class="app">
+    <header class="app-head card">
+      <div class="logo">BG</div>
+      <div>
+        <h1>BASEMAP-GENERATOR <span>powered by ChatGPT + NXTIndustries</span></h1>
+        <div class="subtitle">Select area, export high-res basemap for Trainz</div>
+      </div>
+    </header>
 
-  <div class="card" id="map-wrap">
-    <div class="top-controls">
-      <input id="searchInput" type="text" placeholder="Search place or address"/>
-      <button id="btnSearch" class="btn ghost">Search</button>
+    <div class="card" id="map-wrap">
+      <div class="top-controls">
+        <input id="searchInput" type="text" placeholder="Search place or address" />
+        <button id="btnSearch" class="btn ghost">Search</button>
+      </div>
+      <div id="map"></div>
+      <div id="cropBox">
+        <div style="pointer-events:none">Crop Area</div>
+      </div>
     </div>
-    <div id="map"></div>
-    <div id="cropBox">
-      Crop Area
-    </div>
+
+    <aside class="card meta">
+      <div class="controls">
+        <label class="small">Output Size</label>
+        <select id="sizeSel">
+          <option value="1024">1024 × 1024</option>
+          <option value="2048">2048 × 2048</option>
+          <option value="4096">4096 × 4096</option>
+        </select>
+
+        <label class="small">Actions</label>
+        <div class="btn-group">
+          <button id="btnGenerate" class="btn">Generate</button>
+          <button id="btnExport" class="btn ghost" disabled>Export ZIP</button>
+        </div>
+
+        <div class="card">
+          <label class="small">Preview / Logs</label>
+          <pre id="result">Ready.</pre>
+        </div>
+      </div>
+    </aside>
+
+    <footer>Built for Trainz — Export .zip (basemap + config + .im)</footer>
   </div>
 
-  <aside class="card meta">
-    <div class="controls">
-      <label class="small">Custom Config</label>
-      <input type="text" id="kuid" placeholder="KUID (e.g., 354892:0001)">
-      <input type="text" id="author" placeholder="Author">
-      <input type="text" id="publisher" placeholder="Publisher">
-      <input type="text" id="desc" placeholder="Description">
-
-      <label class="small">Output Size</label>
-      <select id="sizeSel">
-        <option value="1024">1024 × 1024</option>
-        <option value="2048">2048 × 2048</option>
-        <option value="4096">4096 × 4096</option>
-      </select>
-
-      <label class="small">Actions</label>
-      <div class="btn-row">
-        <button id="btnGenerate" class="btn">Generate</button>
-        <button id="btnExport" class="btn ghost" disabled>Export ZIP</button>
-      </div>
-
-      <pre id="result">Ready.</pre>
-    </div>
-  </aside>
-
-  <footer>Built for Trainz — Export .zip (basemap + config + .im)</footer>
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-<script src="main.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>
