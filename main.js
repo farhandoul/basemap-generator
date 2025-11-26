@@ -1,117 +1,105 @@
-const map = L.map('map', { center:[-7.0,110.4], zoom:15, zoomControl:false });
+// --- init map ---
+const map = L.map('map', { center:[-7.0,110.4], zoom:15, zoomControl:true });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a> &copy; CARTO',
-  subdomains: 'abcd',
-  maxZoom: 19
+  attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
 }).addTo(map);
 
+// fix map container resize
+window.addEventListener('load', ()=>{ map.invalidateSize(); });
 
+// --- crop 1:1 ---
 const crop = document.getElementById('cropBox');
 const mapWrap = document.getElementById('map-wrap');
-let lastImageBlob=null; let lastSize=1024;
-
-// Crop is fixed 1:1, pointer-events:none for now
 function resetCrop(){
-  const size = Math.min(mapWrap.clientWidth,mapWrap.clientHeight)*0.35;
-  crop.style.width = size+'px';
-  crop.style.height = size+'px';
-  crop.style.left = mapWrap.clientWidth/2 - size/2 + 'px';
-  crop.style.top = mapWrap.clientHeight/2 - size/2 + 'px';
+  const size = Math.min(mapWrap.clientWidth,mapWrap.clientHeight)*0.3;
+  crop.style.width = crop.style.height = size+'px';
+  crop.style.left = (mapWrap.clientWidth-size)/2+'px';
+  crop.style.top = (mapWrap.clientHeight-size)/2+'px';
 }
-resetCrop(); window.addEventListener('resize',resetCrop);
+resetCrop();
+window.addEventListener('resize',resetCrop);
 
-// Convert crop to bbox
+// crop drag
+let dragging=false,start={x:0,y:0,left:0,top:0};
+crop.addEventListener('mousedown', e=>{
+  dragging=true;
+  start.x=e.clientX; start.y=e.clientY;
+  const r=crop.getBoundingClientRect();
+  start.left=r.left; start.top=r.top;
+  document.body.style.userSelect='none';
+});
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx=e.clientX-start.x, dy=e.clientY-start.y;
+  const mw=mapWrap.getBoundingClientRect();
+  let nl=start.left+dx, nt=start.top+dy;
+  nl=Math.max(mw.left,Math.min(nl,mw.right-crop.offsetWidth));
+  nt=Math.max(mw.top,Math.min(nt,mw.bottom-crop.offsetHeight));
+  crop.style.left=(nl-mw.left)+'px';
+  crop.style.top=(nt-mw.top)+'px';
+});
+window.addEventListener('mouseup', ()=>{ dragging=false; document.body.style.userSelect='auto'; });
+
+// convert crop -> bbox
 function getCropBbox(){
   const rect=crop.getBoundingClientRect();
   const mapRect=map.getContainer().getBoundingClientRect();
-  const x1=rect.left-mapRect.left; const y1=rect.top-mapRect.top;
-  const x2=x1+rect.width; const y2=y1+rect.height;
-  const p1=map.containerPointToLatLng([x1,y1]); const p2=map.containerPointToLatLng([x2,y2]);
-  return [Math.min(p1.lng,p2.lng),Math.min(p1.lat,p2.lat),Math.max(p1.lng,p2.lng),Math.max(p1.lat,p2.lat)];
+  const x1=rect.left-mapRect.left, y1=rect.top-mapRect.top;
+  const x2=x1+rect.width, y2=y1+rect.height;
+  const p1=map.containerPointToLatLng([x1,y1]);
+  const p2=map.containerPointToLatLng([x2,y2]);
+  return [Math.min(p1.lng,p2.lng), Math.min(p1.lat,p2.lat), Math.max(p1.lng,p2.lng), Math.max(p1.lat,p2.lat)];
 }
 
-// Search
-document.getElementById('btnSearch').addEventListener('click',async ()=>{
+// search
+document.getElementById('btnSearch').addEventListener('click', async ()=>{
   const q=document.getElementById('searchInput').value.trim(); if(!q) return;
   const url='https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q);
-  try{ const res=await fetch(url); const data=await res.json(); if(!data.length) return alert('Not found'); map.setView([parseFloat(data[0].lat),parseFloat(data[0].lon)],17);}catch(e){alert('Search error');}
-});
-
-// Build Esri URL
-function buildEsriUrl(bbox,size){
-  const params=new URLSearchParams({bbox:bbox.join(','),bboxSR:4326,size:size+','+size,imageSR:3857,format:'jpgpng',f:'image'});
-  return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?'+params.toString();
-}
-
-// Generate
-document.getElementById('btnGenerate').addEventListener('click',async ()=>{
-  const size=parseInt(document.getElementById('sizeSel').value,10);
-  const bbox=getCropBbox();
-  document.getElementById('result').innerText='Fetching image...';
   try{
-    const url=buildEsriUrl(bbox,size);
-    const res=await fetch(url); if(!res.ok) throw new Error('HTTP '+res.status);
-    const blob=await res.blob(); lastImageBlob=blob; lastSize=size;
-    document.getElementById('result').innerText=`Image fetched: ${size}×${size}\nURL: ${url}`;
-    document.getElementById('btnExport').disabled=false;
-  }catch(e){document.getElementById('result').innerText='Error: '+e;}
+    const res=await fetch(url); const data=await res.json();
+    if(!data.length) return alert('Not found');
+    map.setView([parseFloat(data[0].lat),parseFloat(data[0].lon)],17);
+  }catch(e){alert('Search error');}
 });
 
-// Export
-document.getElementById('btnExport').addEventListener('click',async ()=>{
-  if(!lastImageBlob) return alert('Generate first');
-  document.getElementById('result').innerText='Building ZIP...';
-  const bmp=await createImageBitmap(lastImageBlob);
-  const thumb=document.createElement('canvas'); thumb.width=240; thumb.height=180; thumb.getContext('2d').drawImage(bmp,0,0,240,180);
-  const thumbBlob=await new Promise(r=>thumb.toBlob(r,'image/jpeg'));
+// --- Generate crop image ---
+let lastCanvas=null;
+document.getElementById('btnGenerate').addEventListener('click', async ()=>{
+  const bbox=getCropBbox();
+  const outputSize=parseInt(document.getElementById('sizeSel').value);
 
-  const kuid=document.getElementById('kuid').value||'xxxxxx:xxxx';
-  const author=document.getElementById('author').value||'Unknown';
-  const publisher=document.getElementById('publisher').value||'Unknown';
-  const desc=document.getElementById('desc').value||'';
+  // clone map to hidden container
+  const tempDiv=document.createElement('div');
+  tempDiv.style.width=outputSize+'px';
+  tempDiv.style.height=outputSize+'px';
+  tempDiv.style.position='absolute';
+  tempDiv.style.left='-9999px';
+  document.body.appendChild(tempDiv);
 
-  const configTxt=`kuid <kuid:${kuid}>
-username "${kuid}"
-kind "scenery"
-trainz-build 2.9
-author "${author}"
-publisher "${publisher}"
-description "${desc}"
+  const tmpMap=L.map(tempDiv, {center:[(bbox[1]+bbox[3])/2,(bbox[0]+bbox[2])/2],zoom:map.getZoom(),zoomControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:19
+  }).addTo(tmpMap);
 
-mesh-table
-{
-  default
-  {
-    mesh "basemap.im"
-    auto-create 1
-  }
-}
+  await new Promise(r=>setTimeout(r,500)); // wait tiles load
 
-thumbnails
-{
-  0
-  {
-    image "thumbnail.jpg"
-    width 240
-    height 180
-  }
-}
+  const canvasImg = await html2canvas(tempDiv, {backgroundColor:null});
+  lastCanvas=canvasImg;
+  document.getElementById('result').textContent='Generated '+outputSize+'x'+outputSize+' basemap.';
+  document.getElementById('btnExport').disabled=false;
+  tmpMap.remove(); tempDiv.remove();
+});
 
-kuid-table
-{
-}`;
-
-  const textureTxt=`Primary=basemap.png\nTile=st\n`;
-  const imTxt=`imfileversion 1.0\nmesh\n{\nvertex 4\n{ -0.5,0,-0.5 }\n{ 0.5,0,-0.5 }\n{ 0.5,0,0.5 }\n{ -0.5,0,0.5 }\npoly 2\n{0,1,2}\n{0,2,3}\n}\n`;
-
+// --- Export ZIP ---
+document.getElementById('btnExport').addEventListener('click', ()=>{
+  if(!lastCanvas) return;
   const zip=new JSZip();
-  zip.file('basemap.png', lastImageBlob);
-  zip.file('thumbnail.jpg', thumbBlob);
-  zip.file('basemap.texture.txt', textureTxt);
-  zip.file('config.txt', configTxt);
-  zip.file('basemap.im', imTxt);
-
-  const blob=await zip.generateAsync({type:'blob'});
-  saveAs(blob,'trainz_basemap.zip');
-  document.getElementById('result').innerText='ZIP ready';
+  lastCanvas.toBlob(blob=>{
+    zip.file('basemap.png',blob);
+    zip.file('config.txt','Trainz basemap config placeholder');
+    zip.file('map.im','IM file placeholder');
+    zip.generateAsync({type:'blob'}).then(content=>{
+      saveAs(content,'basemap_trainz.zip');
+    });
+  });
 });
