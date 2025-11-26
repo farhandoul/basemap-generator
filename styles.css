@@ -1,0 +1,37 @@
+:root {
+  --bg:#0f1113;
+  --card:#111316cc;
+  --accent:#39ff14;
+  --muted:#9aa4b2;
+  --radius:14px;
+}
+
+html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial;color:#e6eef8;background:linear-gradient(180deg,#0b0f14 0%,#0f1113 100%)}
+
+.app{max-width:1200px;margin:28px auto;padding:18px;display:grid;grid-template-columns:1fr 360px;gap:18px}
+
+.card{background:var(--card);backdrop-filter:blur(8px);border-radius:var(--radius);padding:14px;box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+
+header.app-head{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:16px 20px;margin-bottom:4px}
+.logo{width:48px;height:48px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#7dd3fc);display:flex;align-items:center;justify-content:center;font-weight:700;color:#043a5b}
+h1{font-size:18px;margin:0;font-weight:bold}
+h1 span{font-weight:bold}
+.subtitle{font-size:12px;color:var(--muted)}
+
+#map-wrap{position:relative;height:70vh;border-radius:12px;overflow:hidden}
+#map{height:100%;width:100%}
+
+.top-controls{position:absolute;left:18px;top:18px;z-index:1100;display:flex;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);background:var(--bg);padding:6px;border-radius:8px}
+.top-controls input{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:240px;background:rgba(255,255,255,0.05);color:#fff}
+
+.controls{display:flex;flex-direction:column;gap:10px}
+label.small{font-size:12px;color:var(--muted)}
+select,input[type=text]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.03);color:inherit}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:linear-gradient(180deg,var(--accent),#3b82f6);color:#04243a;border:0;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(96,165,250,0.12)}
+
+#cropBox{position:absolute;border:3px solid var(--accent);box-shadow:0 6px 20px rgba(2,6,23,0.6);border-radius:8px;cursor:move;z-index:1000;width:150px;height:150px;display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:600}
+
+pre#result{background:#061018;padding:10px;border-radius:8px;overflow:auto;color:#cfeefe}
+
+footer{grid-column:1/-1;text-align:center;color:var(--muted);font-size:13px;margin-top:8px}
