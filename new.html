@@ -1,0 +1,146 @@
+<!-- Basemap Generator - Single Image Export (Esri Imagery) -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basemap Generator HD</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body { margin:0; padding:0; font-family:Arial, sans-serif; background:#111; color:#fff }
+    #map { width:100vw; height:75vh }
+    #panel { padding:10px; background:#222; display:flex; gap:10px; align-items:center }
+    button{ padding:8px 12px; border-radius:6px; border:0; background:#4caf50; color:#fff; cursor:pointer }
+    button:disabled{ opacity:0.6; cursor:not-allowed }
+    select,input{ padding:8px; border-radius:6px; border:1px solid #444; background:#111; color:#fff }
+    pre#result{ max-height:12vh; overflow:auto; background:#0b0b0b; padding:8px; border-radius:6px }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <label>Ukuran Output:</label>
+    <select id="sizeSel">
+      <option value="1024">1024 × 1024</option>
+      <option value="2048">2048 × 2048</option>
+      <option value="4096">4096 × 4096</option>
+    </select>
+    <button id="btnGenerate">Generate Image</button>
+    <button id="btnExport" disabled>Export Trainz ZIP</button>
+    <span id="status"></span>
+  </div>
+  <pre id="result">Result: -</pre>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <script>
+    // Init map
+    const map = L.map('map', { center:[-7.0,110.4], zoom:16 });
+    const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{x}/{y}', { maxZoom:20, attribution:'Esri' }).addTo(map);
+
+    let lastImageBlob = null;
+    let lastSize = 1024;
+
+    function setStatus(s){ document.getElementById('status').innerText = s }
+
+    // Build export URL (Esri export API)
+    function buildEsriExportURL(bbox, size){
+      // bbox in order: minX,minY,maxX,maxY (lon,lat)
+      const params = new URLSearchParams({
+        bbox: bbox,
+        bboxSR: '4326',
+        size: size + ',' + size,
+        imageSR: '3857',
+        format: 'jpgpng',
+        f: 'image'
+      });
+      return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?' + params.toString();
+    }
+
+    // Generate high-res image and store blob
+    document.getElementById('btnGenerate').addEventListener('click', async () => {
+      setStatus('Generating...');
+      document.getElementById('btnExport').disabled = true;
+      const size = parseInt(document.getElementById('sizeSel').value, 10) || 1024;
+      lastSize = size;
+
+      const bounds = map.getBounds();
+      const minLat = bounds.getSouth();
+      const minLng = bounds.getWest();
+      const maxLat = bounds.getNorth();
+      const maxLng = bounds.getEast();
+      const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
+
+      const url = buildEsriExportURL(bbox, size);
+      setStatus('Fetching image from Esri...');
+
+      try{
+        const res = await fetch(url);
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        lastImageBlob = blob;
+        document.getElementById('result').innerText = 'Image fetched. Size: ' + size + '×' + size + '\nURL: ' + url;
+        setStatus('Ready to export');
+        document.getElementById('btnExport').disabled = false;
+      }catch(err){
+        console.error(err);
+        document.getElementById('result').innerText = 'Error fetching image: ' + err;
+        setStatus('Error');
+      }
+    });
+
+    // Export to Trainz ZIP
+    document.getElementById('btnExport').addEventListener('click', async () => {
+      if(!lastImageBlob) { alert('Belum ada image. Klik Generate Image.'); return; }
+      setStatus('Building ZIP...');
+
+      // create thumbnail 240x180
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 240; thumbCanvas.height = 180;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      const imgBitmap = await createImageBitmap(lastImageBlob);
+      // draw scaled to thumbnail
+      thumbCtx.drawImage(imgBitmap, 0, 0, thumbCanvas.width, thumbCanvas.height);
+      const thumbBlob = await new Promise(res => thumbCanvas.toBlob(res, 'image/jpeg'));
+
+      // prepare config text (user provided template adjusted)
+      const configTxt = `kuid               <kuid:xxxxxx:xxxx>\n`+
+                        `username           "Basemap HD"\n`+
+                        `description        "Generated basemap"\n`+
+                        `trainz-build       2.9\n`+
+                        `kind               "scenery"\n`+
+                        `category-class     "BR"\n`+
+                        `category-era       "2010s"\n`+
+                        `category-region    "ID"\n`+
+                        `author             "Farhan Abdul Rahman"\n`+
+                        `organisation       ""\n`+
+                        `contact-email      ""\n`+
+                        `contact-website    ""\n`+
+                        `license            ""\n\n`+
+                        `mesh-table\n{\n  default\n  {\n    mesh           "basemap.im"\n    auto-create    1\n  }\n}\n`+
+                        `light              1\n\n`+
+                        `thumbnails\n{\n  0\n  {\n    image          "thumbnail.jpg"\n    width          240\n    height         180\n  }\n}\n`;
+
+      // texture descriptor
+      const textureTxt = 'basemap.jpg\ncompression=jpeg\n';
+
+      // simple .im mesh text (very minimal plane). Trainz .im format varies; this is a basic placeholder.
+      const imText = 'imfileversion 1.0\nmesh\n{\n  vertex 4\n  { -0.5, 0, -0.5 }\n  { 0.5, 0, -0.5 }\n  { 0.5, 0, 0.5 }\n  { -0.5, 0, 0.5 }\n  poly 2\n  { 0,1,2 }\n  { 0,2,3 }\n}\n';
+
+      // Build ZIP
+      const zip = new JSZip();
+      zip.file('basemap.jpg', lastImageBlob);
+      zip.file('thumbnail.jpg', thumbBlob);
+      zip.file('basemap.texture.txt', textureTxt);
+      zip.file('config.txt', configTxt);
+      zip.file('basemap.im', imText);
+
+      const content = await zip.generateAsync({ type:'blob' });
+      saveAs(content, 'trainz_basemap.zip');
+      setStatus('ZIP ready');
+    });
+  </script>
+</body>
+</html>
